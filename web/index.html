@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>0AMV Backtest Dashboard</title>
+    <link rel="stylesheet" href="./styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+  </head>
+  <body>
+    <header class="topbar">
+      <div>
+        <p class="eyebrow">RQAlpha Backtest</p>
+        <h1>0AMV 多空波段回测</h1>
+      </div>
+      <div class="status-strip">
+        <span id="generatedAt" aria-live="polite">正在加载</span>
+        <button id="refreshBtn" type="button" title="刷新数据" aria-label="刷新数据">
+          <span aria-hidden="true">↻</span>
+        </button>
+        <span class="action-divider"></span>
+        <button id="fullUpdateBtn" type="button" title="启动软件下载数据后更新（指南针+通达信+AMV+概念+ETF+bundle）" aria-label="全量更新" class="action-btn">
+          <span aria-hidden="true">⏬</span> 全量更新
+        </button>
+        <button id="updateDataBtn" type="button" title="更新数据（AMV+概念+ETF+bundle）" aria-label="更新数据" class="action-btn">
+          <span aria-hidden="true">↗</span> 更新数据
+        </button>
+        <button id="runBacktestBtn" type="button" title="执行回测并更新面板" aria-label="执行回测" class="action-btn primary">
+          <span aria-hidden="true">▶</span> 回测
+        </button>
+      </div>
+    </header>
+
+    <main>
+      <div id="appMessage" class="notice hidden" role="status" aria-live="polite"></div>
+
+      <section class="metrics" aria-label="回测概览">
+        <div id="metricsSkeleton">
+          <article class="metric skeleton-loading"><div class="skeleton skeleton-block"></div><div class="skeleton skeleton-block"></div></article>
+          <article class="metric skeleton-loading"><div class="skeleton skeleton-block"></div><div class="skeleton skeleton-block"></div></article>
+          <article class="metric skeleton-loading"><div class="skeleton skeleton-block"></div><div class="skeleton skeleton-block"></div></article>
+          <article class="metric skeleton-loading"><div class="skeleton skeleton-block"></div><div class="skeleton skeleton-block"></div></article>
+          <article class="metric skeleton-loading"><div class="skeleton skeleton-block"></div><div class="skeleton skeleton-block"></div></article>
+        </div>
+        <div id="metricsContent" class="hidden">
+          <article class="metric">
+            <span>累计收益</span>
+            <strong id="totalReturn">--</strong>
+          </article>
+          <article class="metric">
+            <span>最大回撤</span>
+            <strong id="maxDrawdown">--</strong>
+          </article>
+          <article class="metric">
+            <span>期末资产</span>
+            <strong id="endingValue">--</strong>
+          </article>
+          <article class="metric">
+            <span>交易次数</span>
+            <strong id="tradeCount">--</strong>
+          </article>
+          <article class="metric">
+            <span>当前状态</span>
+            <strong id="latestRegime">--</strong>
+          </article>
+        </div>
+      </section>
+
+      <section class="workspace">
+        <div class="panel chart-panel">
+          <div class="panel-head">
+            <div>
+              <h2 id="chartTitle">净值曲线</h2>
+              <p id="chartMeta">--</p>
+            </div>
+            <div class="segmented" role="tablist" aria-label="图表">
+              <button class="active" id="chartTabEquity" role="tab" aria-selected="true" aria-controls="chartPanel" data-chart="equity" type="button">净值</button>
+              <button id="chartTabAmv" role="tab" aria-selected="false" aria-controls="chartPanel" data-chart="amv" type="button">0AMV</button>
+              <button id="chartTabDrawdown" role="tab" aria-selected="false" aria-controls="chartPanel" data-chart="drawdown" type="button">回撤</button>
+            </div>
+          </div>
+          <div id="chartPanel" class="chart-wrap" role="tabpanel" aria-labelledby="chartTabEquity">
+            <div id="chartSkeleton" class="skeleton chart-skeleton"></div>
+            <div id="mainChart" class="hidden" style="width:100%;height:100%"></div>
+            <div id="emptyChart" class="empty hidden">暂无展示数据</div>
+          </div>
+        </div>
+
+        <aside class="panel side-panel">
+          <div class="panel-head compact">
+            <h2>策略状态</h2>
+          </div>
+          <div id="stateList" class="state-list">
+            <div class="state-item skeleton-loading"><div class="skeleton skeleton-block"></div><div class="skeleton skeleton-block"></div></div>
+            <div class="state-item skeleton-loading"><div class="skeleton skeleton-block"></div><div class="skeleton skeleton-block"></div></div>
+            <div class="state-item skeleton-loading"><div class="skeleton skeleton-block"></div><div class="skeleton skeleton-block"></div></div>
+          </div>
+        </aside>
+      </section>
+
+      <section class="panel table-panel">
+        <div class="panel-head">
+          <div>
+            <h2 id="tableTitle">交易明细</h2>
+            <p id="tableMeta">--</p>
+          </div>
+          <div class="segmented" role="tablist" aria-label="表格">
+            <button class="active" id="tableTabTrades" role="tab" aria-selected="true" aria-controls="tablePanel" data-table="trades" type="button">交易</button>
+            <button id="tableTabTxns" role="tab" aria-selected="false" aria-controls="tablePanel" data-table="txns" type="button">完整交易</button>
+            <button id="tableTabSignals" role="tab" aria-selected="false" aria-controls="tablePanel" data-table="signals" type="button">信号</button>
+          </div>
+        </div>
+        <div id="tablePanel" class="table-scroll" role="tabpanel" aria-labelledby="tableTabTrades">
+          <div id="tableSkeleton" style="padding:16px">
+            <div class="skeleton skeleton-block"></div>
+            <div class="skeleton skeleton-block"></div>
+            <div class="skeleton skeleton-block"></div>
+            <div class="skeleton skeleton-block"></div>
+            <div class="skeleton skeleton-block"></div>
+          </div>
+          <table id="tableContent" class="hidden" aria-label="回测明细">
+            <thead id="tableHead"></thead>
+            <tbody id="tableBody"></tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <div id="progressOverlay" class="progress-overlay hidden">
+      <div class="progress-modal">
+        <div class="progress-head">
+          <h3 id="progressTitle">执行中</h3>
+          <span id="progressStatus" class="progress-status"><span class="progress-spinner"></span>运行中</span>
+        </div>
+        <div id="progressBody" class="progress-body">等待输出...</div>
+        <div class="progress-foot">
+          <button id="progressCloseBtn" type="button" disabled>关闭</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="./app.js"></script>
+  </body>
+</html>

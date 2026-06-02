@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+.env
+.venv/
+
+# RQAlpha bundle (generated binary data)
+.rqalpha/
+bundle/bundle/*.h5
+bundle/bundle/*.h5.bak
+bundle/bundle/instruments.pk
+bundle/bundle/future_info.json
+bundle/bundle/share_transformation.json
+bundle/bundle/trading_dates.npy
+
+# Generated reports & data
+reports/
+web/data/dashboard.json
+web/server.pid
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temp / test files
+api_test.txt
+
+# OS
+Thumbs.db
+.DS_Store

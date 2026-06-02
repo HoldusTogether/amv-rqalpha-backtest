@@ -1,0 +1,7 @@
+rqalpha==6.1.5
+pandas==2.3.3
+numpy
+matplotlib
+openpyxl
+pyyaml
+akshare
