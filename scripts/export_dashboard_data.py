@@ -9,18 +9,7 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.append(str(ROOT / "strategy"))
 
-from amv_rules import (  # noqa: E402
-    BandParams,
-    decide_action,
-    initial_state,
-    load_amv_daily,
-)
-from momentum_selectors import (  # noqa: E402
-    load_concept_daily,
-    load_concept_etf_map,
-    load_etf_daily,
-    select_etf_by_concept_momentum,
-)
+from amv_rules import load_amv_daily  # noqa: E402
 
 
 def _read_csv(path: Path) -> pd.DataFrame:
@@ -51,21 +40,10 @@ def _iso_date(value) -> str:
     return pd.Timestamp(value).date().isoformat()
 
 
-# ── 策略信号标签（含阈值） ──
-SIGNAL_LABELS = {
-    "LONG_SIGNAL": "多头确认(+4%)",
-    "REDUCE": "减仓(-1.5%)",
-    "SHORT_CLEAR": "空头清仓(-2.3%)",
-    "ANCHOR_BREAK_CLEAR": "跌破锚点清仓",
-    "HOLD_LONG": "持有",
-    "WAIT": "等待",
-}
-
-
 REASON_LABELS = {
-    "amv_long_threshold": "AMV涨幅突破+4%",
-    "amv_short_threshold": "AMV跌幅突破-2.3%",
-    "amv_reduce_threshold": "AMV跌幅突破-1.5%",
+    "amv_long_threshold": "AMV涨幅突破+3.5%",
+    "amv_short_threshold": "AMV跌幅突破-3.0%",
+    "amv_reduce_threshold": "AMV跌幅突破-2.0%",
     "amv_anchor_break": "跌破锚定低点",
     "roll_anchor": "多头延续·滚动锚点",
     "hold": "持仓中",
@@ -73,139 +51,89 @@ REASON_LABELS = {
 }
 
 
-def _compute_trade_action(
-    raw_action: str,
-    was_holding: bool,
-    is_new_entry: bool,
-    prev_weight: float = 0.0,
-    new_weight: float = 0.0,
-) -> str:
-    """根据信号+持仓状态推断实际交易动作"""
-    if raw_action == "LONG_SIGNAL" and is_new_entry:
-        return "买入"
-    if raw_action in {"SHORT_CLEAR", "ANCHOR_BREAK_CLEAR"} and was_holding:
-        return "清仓"
-    if raw_action == "REDUCE" and was_holding and new_weight != prev_weight:
-        return "减仓"
-    # 无实际交易
-    if was_holding:
-        return "持有"
-    else:
-        return "等待"
-
-
-def _position_status_label(target_weight: float) -> str:
-    if target_weight >= 0.99:
-        return "满仓"
-    elif target_weight > 0:
-        return "半仓"
-    return "空仓"
-
-
 def build_signals() -> list[dict]:
-    data_dir = ROOT / "data"
-    amv = load_amv_daily(data_dir / "amv_daily.csv")
-    concept_daily = load_concept_daily(data_dir / "concept_daily_returns.csv")
-    concept_map = load_concept_etf_map(data_dir / "concept_etf_map.csv")
+    log_path = ROOT / "reports" / "report" / "signal_log.json"
+    if not log_path.exists():
+        print(f"WARNING: signal_log.json not found at {log_path}")
+        return []
 
-    state = initial_state()
-    params = BandParams()
-    rows: list[dict] = []
+    log = json.loads(log_path.read_text(encoding="utf-8"))
 
-    for _, amv_row in amv.iterrows():
-        # 记录处理此K线前的持仓状态
-        prev_holding_etf = state.get("current_etf")
-        prev_weight = state.get("target_weight", 0.0)
-        was_holding = prev_holding_etf is not None and prev_weight > 0
+    amv = load_amv_daily(ROOT / "data" / "amv_daily.csv")
+    amv_map = {}
+    for _, row in amv.iterrows():
+        d = _iso_date(row["date"])
+        amv_map[d] = {
+            "open": _safe_float(row["open"]),
+            "high": _safe_float(row["high"]),
+            "low": _safe_float(row["low"]),
+            "close": _safe_float(row["close"]),
+        }
 
-        decision = decide_action(amv_row, state, params)
-        chosen = None
-        raw_action = decision["action"]
-        is_new_entry = False
+    rows = []
+    for entry in log:
+        d = entry["date"]
+        candle = amv_map.get(d, {})
+        action = entry["action"]
+        reason = entry["reason"]
+        target_w = float(entry["target_weight"])
+        current_etf = entry.get("current_etf")
+        holding_etf = entry.get("holding_etf")
 
-        # 处理选标/清仓
-        # 每次AMV突破多头阈值都跑概念动量选标（无论是否已持仓）
-        pct_signal = _safe_float(amv_row["pct_change"])
-        is_bullish_signal = bool(amv_row["is_bullish"])
-        if pct_signal >= 0.04 and is_bullish_signal:
-            avoid = set(state.get("recent_etfs", []))
-            chosen = select_etf_by_concept_momentum(
-                concept_daily, concept_map, amv_row["date"],
-                window=5, avoid_etfs=avoid, top_n=3, diversity_strength=0.5,
-            )
-            if state.get("current_etf") is None:
-                target_etf = chosen["order_book_id"]
-                state["current_etf"] = target_etf
-                state["entry_date"] = amv_row["date"]
-                recent = list(state.get("recent_etfs", []))
-                if target_etf not in recent:
-                    recent.append(target_etf)
-                    if len(recent) > 5:
-                        recent.pop(0)
-                state["recent_etfs"] = recent
-                is_new_entry = True
-
-        if raw_action in {"SHORT_CLEAR", "ANCHOR_BREAK_CLEAR"}:
-            if was_holding:
-                state["current_etf"] = None
-
-        # 构建显示字段
-        # ── 策略信号：基于 AMV 涨跌幅独立判断，不受持仓状态影响 ──
-        pct_signal = _safe_float(amv_row["pct_change"])
-        low_signal = _safe_float(amv_row["low"])
-        is_bullish_signal = bool(amv_row["is_bullish"])
-        anchor_low_signal = state.get("anchor_low")
-        has_pos_signal = prev_holding_etf is not None and prev_weight > 0
-
-        if pct_signal >= 0.04 and is_bullish_signal:
-            signal_label = "多头确认(+4%)"
-        elif pct_signal <= -0.023:
-            signal_label = "空头清仓(-2.3%)"
-        elif pct_signal <= -0.015 and has_pos_signal:
-            signal_label = "减仓(-1.5%)"
-        elif has_pos_signal and anchor_low_signal is not None and _safe_float(low_signal) < _safe_float(anchor_low_signal):
+        if action == "LONG_SIGNAL":
+            signal_label = "多头确认(+3.5%)"
+        elif action == "SHORT_CLEAR":
+            signal_label = "空头清仓(-3.0%)"
+        elif action == "REDUCE":
+            signal_label = "减仓(-2.0%)"
+        elif action == "ANCHOR_BREAK_CLEAR":
             signal_label = "跌破锚点清仓"
-        elif has_pos_signal:
+        elif action == "HOLD_LONG":
             signal_label = "持有"
         else:
             signal_label = "等待"
 
-        # 选中标的：仅在多头确认信号时展示概念动量选出的标的
-        # 持有/减仓/清仓/等待时均为空
-        display_selected_etf = chosen["order_book_id"] if chosen is not None else None
+        was_holding = current_etf is not None
+        is_new_entry = action == "LONG_SIGNAL" and not was_holding
+        if action == "LONG_SIGNAL" and is_new_entry:
+            trade_action = "买入"
+        elif action in {"SHORT_CLEAR", "ANCHOR_BREAK_CLEAR"} and was_holding:
+            trade_action = "清仓"
+        elif action == "REDUCE" and was_holding:
+            trade_action = "减仓"
+        elif holding_etf is not None:
+            trade_action = "持有"
+        else:
+            trade_action = "等待"
 
-        target_w = _safe_float(decision["target_weight"])
-        rows.append(
-            {
-                "date": _iso_date(amv_row["date"]),
-                "open": _safe_float(amv_row["open"]),
-                "high": _safe_float(amv_row["high"]),
-                "low": _safe_float(amv_row["low"]),
-                "close": _safe_float(amv_row["close"]),
-                "pct_change": _safe_float(amv_row["pct_change"]),
-                # 策略信号（原始）
-                "action": raw_action,
-                # 策略信号标签（基于 AMV 阈值独立判断）
-                "signal_label": signal_label,
-                # 交易动作
-                "trade_action": _compute_trade_action(raw_action, was_holding, is_new_entry, prev_weight, target_w),
-                # 状态
-                "regime": state["regime"],
-                # 仓位信息
-                "position_status": _position_status_label(target_w),
-                "target_weight": _safe_float(target_w),
-                "holding_etf": state.get("current_etf"),
-                # 选标信息（多头确认时展示对应标的）
-                "selected_etf": display_selected_etf,
-                "selected_concept": chosen["concept"] if chosen else None,
-                "selected_momentum": chosen["momentum"] if chosen else None,
-                # 锚点
-                "anchor_low": _safe_float(state.get("anchor_low"), None),
-                # 原因（中文）
-                "reason": decision["reason"],
-                "reason_label": REASON_LABELS.get(decision["reason"], decision["reason"]),
-            }
-        )
+        if target_w >= 0.99:
+            position_status = "满仓"
+        elif target_w > 0:
+            position_status = "半仓"
+        else:
+            position_status = "空仓"
+
+        rows.append({
+            "date": d,
+            "open": candle.get("open"),
+            "high": candle.get("high"),
+            "low": candle.get("low"),
+            "close": candle.get("close"),
+            "pct_change": _safe_float(entry.get("pct_change")),
+            "action": action,
+            "signal_label": signal_label,
+            "trade_action": trade_action,
+            "regime": entry.get("regime", ""),
+            "position_status": position_status,
+            "target_weight": target_w,
+            "holding_etf": holding_etf,
+            "selected_etf": entry.get("selected_etf"),
+            "selected_concept": entry.get("selected_concept"),
+            "selected_momentum": _safe_float(entry.get("selected_momentum"), None),
+            "anchor_low": entry.get("anchor_low"),
+            "reason": reason,
+            "reason_label": REASON_LABELS.get(reason, reason),
+        })
     return rows
 
 

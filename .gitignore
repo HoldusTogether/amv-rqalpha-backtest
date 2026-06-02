@@ -25,6 +25,10 @@ web/server.pid
 *.swp
 *.swo
 
+# Live monitor (runtime state + secrets)
+live/state.json
+live/config.py
+
 # Temp / test files
 api_test.txt
 
