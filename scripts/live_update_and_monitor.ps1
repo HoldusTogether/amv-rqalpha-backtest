@@ -1,8 +1,8 @@
 ﻿<#
 .SYNOPSIS
-  One-click data update + live monitor
+  One-click data update + live monitor with auto-login
 .DESCRIPTION
-  1. Launch Compass/TDX for latest daily data
+  1. Launch Compass/TDX, auto-login via SendKeys, wait for data download
   2. Extract AMV, concept, ETF data
   3. Run AMV live monitor with WeChat push
 #>
@@ -25,6 +25,26 @@ function Write-Step {
 function Write-Info {
   param([string]$Msg)
   Write-Host "  $Msg"
+}
+
+function Send-LoginKeys {
+  param([string[]]$WindowTitles, [int]$MaxWaitSec = 20)
+
+  $wshell = New-Object -ComObject wscript.shell
+  for ($i = 0; $i -lt $MaxWaitSec; $i++) {
+    foreach ($title in $WindowTitles) {
+      $found = $wshell.AppActivate($title)
+      if ($found) {
+        Start-Sleep -Milliseconds 300
+        $wshell.SendKeys("~")
+        Write-Info ("  Login sent to window: " + $title)
+        return $true
+      }
+    }
+    Start-Sleep -Seconds 1
+  }
+  Write-Info ("  Window not found: " + ($WindowTitles -join ", "))
+  return $false
 }
 
 # -- Step 0: env check --
@@ -57,7 +77,16 @@ if ($processes.Count -eq 0) {
   exit 0
 }
 
-# wait for data update (max 120s)
+# -- SendKeys auto-login --
+Write-Info "Sending login keystrokes..."
+if (Test-Path $ZnzExe) {
+  Send-LoginKeys -WindowTitles @("指南针", "IMMainV2") -MaxWaitSec 20
+}
+if (Test-Path $TdxExe) {
+  Send-LoginKeys -WindowTitles @("登录通达信", "通达信金融终端", "通达信") -MaxWaitSec 20
+}
+
+# wait for data update (max 120s since launch)
 Write-Info "Waiting for data download..."
 $waited = 0
 $znzDone = -not (Test-Path $ZnzExe)
