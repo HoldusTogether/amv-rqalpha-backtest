@@ -1,17 +1,17 @@
-<#
+﻿<#
 .SYNOPSIS
-  一键更新数据 + 实盘监控
+  One-click data update + live monitor
 .DESCRIPTION
-  1. 启动指南针和通达信，等待最新日线数据下载
-  2. 提取 AMV、概念、ETF 数据
-  3. 运行 AMV 实盘监控脚本，信号变化时推送到微信
+  1. Launch Compass/TDX for latest daily data
+  2. Extract AMV, concept, ETF data
+  3. Run AMV live monitor with WeChat push
 #>
 
 $Root = Split-Path -Parent $PSScriptRoot
 $Python = Join-Path $Root ".venv\Scripts\python.exe"
 $LiveMonitor = Join-Path $Root "live\live_monitor.py"
 
-# ── 路径 ──
+# -- paths --
 $ZnzExe   = "D:\Program Files (x86)\zhinanzhen\IMMainV2.exe"
 $ZnzData  = "D:\Program Files (x86)\zhinanzhen\ANALYSE\Data\ChinaStk\Z_SK\day.vdat"
 $TdxExe   = "D:\new_tdx\tdxw.exe"
@@ -27,14 +27,14 @@ function Write-Info {
   Write-Host "  $Msg"
 }
 
-# ── Step 0: 检查可执行文件 ──
-Write-Step "环境检查"
-if (-not (Test-Path $Python)) { Write-Host "ERROR: Python 未找到 ${Python}"; exit 1 }
-if (-not (Test-Path $ZnzExe)) { Write-Info "指南针未安装，跳过 AMV 更新" }
-if (-not (Test-Path $TdxExe)) { Write-Info "通达信未安装，跳过 ETF 更新" }
+# -- Step 0: env check --
+Write-Step "Check environment"
+if (-not (Test-Path $Python)) { Write-Host "ERROR: Python not found: $Python"; exit 1 }
+if (-not (Test-Path $ZnzExe)) { Write-Info "Compass not found, skip AMV update" }
+if (-not (Test-Path $TdxExe)) { Write-Info "TDX not found, skip ETF update" }
 
-# ── Step 1: 启动指南针 + 通达信 ──
-Write-Step "启动数据源软件"
+# -- Step 1: launch data sources --
+Write-Step "Launch data software"
 
 $ZnzBefore = if (Test-Path $ZnzData) { (Get-Item $ZnzData).LastWriteTime } else { Get-Date "2000-01-01" }
 $TdxBefore = if (Test-Path $TdxData) { (Get-Item $TdxData).LastWriteTime } else { Get-Date "2000-01-01" }
@@ -42,23 +42,23 @@ $TdxBefore = if (Test-Path $TdxData) { (Get-Item $TdxData).LastWriteTime } else 
 $processes = @()
 if (Test-Path $ZnzExe) {
   $p = Start-Process -FilePath $ZnzExe -PassThru
-  Write-Info "指南针已启动 (PID: $($p.Id))"
+  Write-Info ("Compass started (PID: " + $p.Id + ")")
   $processes += $p
 }
 if (Test-Path $TdxExe) {
   $p = Start-Process -FilePath $TdxExe -PassThru
-  Write-Info "通达信已启动 (PID: $($p.Id))"
+  Write-Info ("TDX started (PID: " + $p.Id + ")")
   $processes += $p
 }
 
 if ($processes.Count -eq 0) {
-  Write-Host "没有可用的数据源，直接运行监控"
+  Write-Host "No data source, run monitor directly"
   & $Python $LiveMonitor
   exit 0
 }
 
-# 等待数据更新 (最多 120s)
-Write-Info "等待数据下载中..."
+# wait for data update (max 120s)
+Write-Info "Waiting for data download..."
 $waited = 0
 $znzDone = -not (Test-Path $ZnzExe)
 $tdxDone = -not (Test-Path $TdxExe)
@@ -70,53 +70,53 @@ while ($waited -lt 120) {
   if (-not $znzDone -and (Test-Path $ZnzData)) {
     $mtime = (Get-Item $ZnzData).LastWriteTime
     if ($mtime -gt $ZnzBefore) {
-      Write-Info "指南针数据已更新 ($mtime)"
+      Write-Info ("Compass data updated (" + $mtime + ")")
       $znzDone = $true
     }
   }
   if (-not $tdxDone -and (Test-Path $TdxData)) {
     $mtime = (Get-Item $TdxData).LastWriteTime
     if ($mtime -gt $TdxBefore) {
-      Write-Info "通达信数据已更新 ($mtime)"
+      Write-Info ("TDX data updated (" + $mtime + ")")
       $tdxDone = $true
     }
   }
   if ($znzDone -and $tdxDone) { break }
 }
 
-Write-Info "等待结束 (耗时 ${waited}s)"
+Write-Info ("Wait done (" + $waited + "s)")
 
-# 关闭软件
-Write-Info "关闭数据源软件..."
+# close software
+Write-Info "Closing data software..."
 foreach ($p in $processes) {
   Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
 }
 Start-Sleep -Seconds 3
 
-# ── Step 2: 数据提取 ──
-Write-Step "提取 AMV 数据"
+# -- Step 2: extract data --
+Write-Step "Extract AMV data"
 if (Test-Path $ZnzExe) {
   & $Python (Join-Path $Root "scripts\extract_amv_klines.py")
 } else {
-  Write-Info "跳过 (指南针未安装)"
+  Write-Info "Skip (Compass not installed)"
 }
 
-Write-Step "更新概念数据 (AKShare)"
+Write-Step "Update concept data (AKShare)"
 & $Python (Join-Path $Root "scripts\fetch_concept_data_akshare.py")
 
-Write-Step "更新 ETF 数据 (通达信)"
+Write-Step "Update ETF data (TDX)"
 if (Test-Path $TdxExe) {
   & $Python (Join-Path $Root "scripts\build_etf_flow_from_tdx.py")
 } else {
-  Write-Info "跳过 (通达信未安装)"
+  Write-Info "Skip (TDX not installed)"
 }
 
-# ── Step 3: 运行监控 ──
-Write-Step "运行实盘监控"
+# -- Step 3: run monitor --
+Write-Step "Run live monitor"
 & $Python $LiveMonitor
 if ($LASTEXITCODE -ne 0) {
-  Write-Host "监控运行失败 (exit code: $LASTEXITCODE)" -ForegroundColor Red
+  Write-Host ("Monitor failed (exit code: " + $LASTEXITCODE + ")") -ForegroundColor Red
   exit $LASTEXITCODE
 }
 
-Write-Host "`n全部完成！" -ForegroundColor Green
+Write-Host "DONE" -ForegroundColor Green
