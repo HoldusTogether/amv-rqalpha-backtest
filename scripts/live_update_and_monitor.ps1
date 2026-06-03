@@ -12,7 +12,7 @@ $Python = Join-Path $Root ".venv\Scripts\python.exe"
 $LiveMonitor = Join-Path $Root "live\live_monitor.py"
 
 # -- paths --
-$ZnzExe   = "D:\Program Files (x86)\zhinanzhen\IMMainV2.exe"
+$ZnzExe   = "D:\Program Files (x86)\zhinanzhen\WavMain.exe"
 $ZnzData  = "D:\Program Files (x86)\zhinanzhen\ANALYSE\Data\ChinaStk\Z_SK\day.vdat"
 $TdxExe   = "D:\new_tdx\tdxw.exe"
 $TdxData  = "D:\new_tdx\vipdoc\sh\lday\sh000001.day"
@@ -80,7 +80,7 @@ if ($processes.Count -eq 0) {
 # -- SendKeys auto-login --
 Write-Info "Sending login keystrokes..."
 if (Test-Path $ZnzExe) {
-  Send-LoginKeys -WindowTitles @("指南针", "IMMainV2") -MaxWaitSec 20
+  Send-LoginKeys -WindowTitles @("指南针全赢", "指南针", "WavMain") -MaxWaitSec 20
 }
 if (Test-Path $TdxExe) {
   Send-LoginKeys -WindowTitles @("登录通达信", "通达信金融终端", "通达信") -MaxWaitSec 20
