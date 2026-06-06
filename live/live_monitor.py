@@ -1,14 +1,20 @@
 """
 AMV 实盘监控脚本
 
-用法: python live/live_monitor.py [--force]
+用法: python live/live_monitor.py [--force] [--no-push]
 前置条件: data/*.csv 已是最新数据
+
+参数:
+  --force    忽略当日去重，强制重新运行
+  --no-push  抑制内置的 Server酱 微信推送（仍会构造消息并打印
+             "PUSH SUPPRESSED: <title>"）。用于上游脚本（如
+             scripts/live_update_and_monitor.ps1）接管推送职责。
 
 流程:
   1. 读取 state.json 恢复持仓状态
   2. 加载最新 AMV/概念/ETF 数据
   3. 运行 decide_action 判断信号
-  4. 若有信号变化 → Server酱 推送到微信
+  4. 若有信号变化 → Server酱 推送到微信（除非 --no-push）
   5. 保存状态到 state.json
 """
 
@@ -196,6 +202,10 @@ def main() -> int:
         "--force", action="store_true",
         help="忽略去重，强制重新运行",
     )
+    parser.add_argument(
+        "--no-push", action="store_true",
+        help="抑制内置微信推送（仍构造消息并打印 PUSH SUPPRESSED）",
+    )
     args = parser.parse_args()
 
     today = date.today()
@@ -320,8 +330,11 @@ def main() -> int:
 
     if should_push:
         title, content = build_msg(action, amv_row, chosen, state)
-        print("推送: {}".format(title))
-        push_notification(title, content)
+        if args.no_push:
+            print("PUSH SUPPRESSED: {}".format(title))
+        else:
+            print("推送: {}".format(title))
+            push_notification(title, content)
     else:
         print("无变化 ({} → {})，不推送".format(prev_action, action))
 

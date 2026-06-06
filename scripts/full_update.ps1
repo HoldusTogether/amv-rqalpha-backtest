@@ -21,10 +21,12 @@ function Write-Log {
 }
 
 # ── 路径 ──
-$ZnzExe   = "D:\Program Files (x86)\zhinanzhen\IMMainV2.exe"
-$ZnzData  = "D:\Program Files (x86)\zhinanzhen\ANALYSE\Data\ChinaStk\Z_SK\day.vdat"
-$TdxExe   = "D:\new_tdx\tdxw.exe"
-$TdxData  = "D:\new_tdx\vipdoc\sh\lday\sh000001.day"
+$ZnzDir   = "D:\Program Files (x86)\zhinanzhen"
+$ZnzExe   = "$ZnzDir\WavMain.exe"
+$ZnzData  = "$ZnzDir\ANALYSE\Data\ChinaStk\Z_SK\day.vdat"
+$TdxDir   = "D:\new_tdx"
+$TdxExe   = "$TdxDir\tdxw.exe"
+$TdxData  = "$TdxDir\vipdoc\sh\lday\sh000001.day"
 
 # ── 检查可执行文件是否存在 ──
 if (-not (Test-Path $ZnzExe))  { Write-Log "ERROR: 指南针未找到 $ZnzExe"; exit 1 }
@@ -35,11 +37,11 @@ $ZnzBefore = if (Test-Path $ZnzData) { (Get-Item $ZnzData).LastWriteTime } else 
 $TdxBefore = if (Test-Path $TdxData) { (Get-Item $TdxData).LastWriteTime } else { Get-Date "2000-01-01" }
 
 Write-Log "=== 启动指南针 ==="
-$znz = Start-Process -FilePath $ZnzExe -PassThru
+$znz = Start-Process -FilePath $ZnzExe -WorkingDirectory $ZnzDir -PassThru
 Write-Log "  指南针 PID: $($znz.Id)"
 
 Write-Log "=== 启动通达信 ==="
-$tdx = Start-Process -FilePath $TdxExe -PassThru
+$tdx = Start-Process -FilePath $TdxExe -WorkingDirectory $TdxDir -PassThru
 Write-Log "  通达信 PID: $($tdx.Id)"
 
 # ── 等待数据更新（最多 120 秒）──

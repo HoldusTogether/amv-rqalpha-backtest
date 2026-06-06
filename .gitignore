@@ -32,6 +32,17 @@ live/config.py
 # Temp / test files
 api_test.txt
 
+# PS diagnostic / calibration scripts (one-time dev tools, not part of live flow)
+scripts/calibrate_*.ps1
+scripts/inspect_*.ps1
+scripts/test_*.ps1
+scripts/inspect_log.txt
+
+# Diagnostic screenshots & test logs
+scripts/*.png
+scripts/diag_*.png
+scripts/live_e2e_*.log
+
 # OS
 Thumbs.db
 .DS_Store

@@ -2,7 +2,7 @@
 .SYNOPSIS
   注册 AMV 实盘监控每日定时任务（交易日盘后）
 .DESCRIPTION
-  创建 Windows 计划任务，每个交易日 15:30 自动运行 live_update_and_monitor.ps1
+  创建 Windows 计划任务，每个交易日 16:00 自动运行 live_update_and_monitor.ps1
   需要用户登录状态（因为要打开指南针/通达信）
 #>
 
@@ -23,8 +23,8 @@ if ($existing) {
     Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false
 }
 
-# ── 创建触发器：每工作日 15:30 ──
-$trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday,Tuesday,Wednesday,Thursday,Friday -At "15:30"
+# ── 创建触发器：每工作日 16:00 ──
+$trigger = New-ScheduledTaskTrigger -Weekly -DaysOfWeek Monday,Tuesday,Wednesday,Thursday,Friday -At "16:00"
 
 # ── 创建任务 ──
 $action = New-ScheduledTaskAction -Execute "PowerShell.exe" -Argument "-NoProfile -ExecutionPolicy Bypass -File `"$ScriptPath`""
@@ -35,7 +35,7 @@ Register-ScheduledTask -TaskName $TaskName -Action $action -Trigger $trigger -Se
 
 if ($?) {
     Write-Host "`n✅ 任务已注册: $TaskName" -ForegroundColor Green
-    Write-Host "  触发器: 交易日 15:30"
+    Write-Host "  触发器: 交易日 16:00"
     Write-Host "  脚本: $ScriptPath"
     Write-Host "  用户: $env:USERDOMAIN\$env:USERNAME"
     Write-Host "`n如需修改时间，运行:"
