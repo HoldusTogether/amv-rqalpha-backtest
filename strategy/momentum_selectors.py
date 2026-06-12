@@ -76,9 +76,10 @@ def load_etf_candidates(path: str | Path) -> list[str]:
 
 def load_concept_daily(path: str | Path) -> pd.DataFrame:
     """
-    加载概念日线。优先加载 path（AKShare 输出，2019+），
-    若不存在或为空则回退到 concept_daily_returns_tdx.csv（TDX，2005+）。
-    当两个数据源都存在时，AKShare 覆盖较新日期，TDX 补充较早日期。
+    加载概念日线。优先使用最新日期的数据源。
+    - TDX 数据通常更新 (2021+)
+    - AKShare 数据可能稍旧
+    合并两个数据源，保留最新日期的记录。
     """
     path = Path(path)
     tdx_path = path.parent / "concept_daily_returns_tdx.csv"
@@ -94,28 +95,38 @@ def load_concept_daily(path: str | Path) -> pd.DataFrame:
     if not has_akshare and not has_tdx:
         return pd.DataFrame(columns=["date", "concept", "close", "return"])
 
-    # Load AKShare primary
+    # ��载两个数据源
+    dfs = []
+    latest_dates = {}
+
     if has_akshare:
         akshare_df = _load(path)
         if not akshare_df.empty:
-            if not has_tdx:
-                return akshare_df
-            # Supplement with TDX data for dates before AKShare coverage
-            tdx_df = _load(tdx_path)
-            akshare_min = akshare_df["date"].min()
-            before = tdx_df[tdx_df["date"] < akshare_min]
-            if before.empty:
-                return akshare_df
-            combined = pd.concat([before, akshare_df], ignore_index=True)
-            return combined.sort_values(["date", "concept"]).drop_duplicates(
-                subset=["date", "concept"], keep="last"
-            )
+            dfs.append(akshare_df)
+            latest_dates['akshare'] = akshare_df["date"].max()
 
-    # Fallback to TDX
     if has_tdx:
-        return _load(tdx_path)
+        tdx_df = _load(tdx_path)
+        if not tdx_df.empty:
+            dfs.append(tdx_df)
+            latest_dates['tdx'] = tdx_df["date"].max()
 
-    return pd.DataFrame(columns=["date", "concept", "close", "return"])
+    if not dfs:
+        return pd.DataFrame(columns=["date", "concept", "close", "return"])
+
+    # 合并所有数据
+    combined = pd.concat(dfs, ignore_index=True)
+
+    # 对于每个 (date, concept) 保留最新的记录
+    combined = combined.sort_values("date").drop_duplicates(
+        subset=["date", "concept"], keep="last"
+    )
+
+    # 按日期和概念排序
+    combined = combined.sort_values(["date", "concept"]).reset_index(drop=True)
+
+    return combined
+
 
 
 def _pick_weighted_top_n(
@@ -198,6 +209,7 @@ def select_etf_by_concept_momentum(
     avoid_etfs: set[str] | None = None,
     top_n: int = 3,
     diversity_strength: float = 0.5,
+    rng: Any = None,
 ) -> dict[str, Any]:
     """
     方向B：概念行业轮动选ETF（按ETF聚合平均动量）。
@@ -283,7 +295,7 @@ def select_etf_by_concept_momentum(
     ranked_candidates.sort(key=lambda x: x[1], reverse=True)
 
     # 4. 从前N中按动量权重随机选
-    best_oid, best_concept = _pick_weighted_top_n(ranked_candidates, top_n=top_n)
+    best_oid, best_concept = _pick_weighted_top_n(ranked_candidates, top_n=top_n, rng=rng)
     best_avg_mom = etf_avg_mom.get(best_oid, 0.0)
     best_max_mom = etf_max_mom.get(best_oid, 0.0)
 

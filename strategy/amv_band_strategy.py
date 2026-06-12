@@ -31,6 +31,7 @@ from amv_rules import (
     load_amv_daily,
     load_etf_candidates,
 )
+from config.params import StrategyParams
 from momentum_selectors import (
     load_concept_daily,
     load_concept_etf_map,
@@ -45,18 +46,9 @@ def init(context):
     strategy_file = Path(context.config.base.strategy_file).resolve()
     context.project_root = strategy_file.parent.parent
     context.data_dir = context.project_root / "data"
-    context.params = BandParams(
-        long_threshold=0.035,
-        reduce_threshold=-0.02,
-        short_threshold=-0.03,
-        long_weight=1.0,
-        reduce_weight=0.5,
-    )
-    context.risk_params = RiskParams(
-        stop_loss_pct=0.08,
-        max_hold_days=60,
-        take_profit_pct=0.0,
-    )
+    sp = StrategyParams()
+    context.params = BandParams(**sp.to_band_params_dict())
+    context.risk_params = RiskParams(**sp.to_risk_params_dict())
     context.amv_daily = load_amv_daily(context.data_dir / "amv_daily.csv")
     context.etf_daily = load_etf_daily(context.data_dir / "etf_flow.csv")
     context.concept_daily = load_concept_daily(context.data_dir / "concept_daily_returns.csv")
