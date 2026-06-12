@@ -7,8 +7,10 @@ import os
 import struct
 from pathlib import Path
 
-TDX_LDAY = r"D:\new_tdx\vipdoc\sh\lday"
-TDX_INFOHARBOR = r"D:\new_tdx\T0002\hq_cache\infoharbor_block.dat"
+from config.paths import paths
+
+TDX_LDAY = paths.TDX_SH_DIR
+TDX_INFOHARBOR = paths.TDX_INFOHARBOR
 OUTPUT_DIR = Path(__file__).resolve().parents[1] / "data"
 
 

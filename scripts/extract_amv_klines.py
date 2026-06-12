@@ -5,6 +5,8 @@ from pathlib import Path
 
 import pandas as pd
 
+from config.paths import paths
+
 
 def parse_klines(data: bytes, start_offset: int) -> list[dict]:
     """Parse 20-byte K-line records from data starting at offset."""
@@ -37,7 +39,7 @@ def parse_klines(data: bytes, start_offset: int) -> list[dict]:
 
 
 def main():
-    vdat = Path(r"D:\Program Files (x86)\zhinanzhen\ANALYSE\Data\ChinaStk\Z_SK\day.vdat").read_bytes()
+    vdat = Path(paths.COMPASS_VDAT).read_bytes()
 
     # Find all K-line entries (after index entries 0-1 which use FA format)
     entries = []

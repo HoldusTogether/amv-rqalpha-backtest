@@ -28,10 +28,12 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 
+from config.paths import paths
+
 ROOT = Path(__file__).resolve().parents[1]
 DATA_DIR = ROOT / "data"
-TDX_SH_DIR = Path(r"D:\new_tdx\vipdoc\sh\lday")
-TDX_SZ_DIR = Path(r"D:\new_tdx\vipdoc\sz\lday")
+TDX_SH_DIR = Path(paths.TDX_SH_DIR)
+TDX_SZ_DIR = Path(paths.TDX_SZ_DIR)
 
 TDX_RECORD_FMT = "<IiiiiiIf"
 TDX_RECORD_SIZE = struct.calcsize(TDX_RECORD_FMT)
