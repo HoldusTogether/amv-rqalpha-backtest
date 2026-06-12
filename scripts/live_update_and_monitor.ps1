@@ -241,6 +241,11 @@ function Open-Compass0Amv {
   [Win32C]::SetForegroundWindow($hwnd) | Out-Null
   Start-Sleep -Seconds 2
   [System.Windows.Forms.SendKeys]::SendWait("0AMV")
+  Start-Sleep -Milliseconds 500
+  # 按 3 次 Enter：第1次激活键盘精灵，第2次选择，第3次导航
+  [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
+  Start-Sleep -Milliseconds 300
+  [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
   Start-Sleep -Milliseconds 300
   [System.Windows.Forms.SendKeys]::SendWait("{ENTER}")
   Start-Sleep -Seconds 5
