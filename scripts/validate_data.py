@@ -55,10 +55,10 @@ def check_amv_daily():
         else:
             print(f"  [OK] AMV {col} no negative values")
 
-    # Check reasonable price range
+    # AMV is an index (values can be ~250k+), only check for non-negative
     for col in ["open", "high", "low", "close"]:
-        if df[col].max() > 100000 or df[col].min() < 0:
-            errors.append(f"AMV: {col} range {df[col].min()}-{df[col].max()} seems abnormal")
+        if df[col].min() < 0:
+            errors.append(f"AMV: {col} has negative values (min={df[col].min()})")
 
     # Check pct_change
     if "pct_change" in df.columns:
