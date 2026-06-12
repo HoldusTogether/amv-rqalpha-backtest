@@ -37,6 +37,7 @@ scripts/calibrate_*.ps1
 scripts/inspect_*.ps1
 scripts/test_*.ps1
 scripts/inspect_log.txt
+scripts/diag_0amv_*.png
 
 # Diagnostic screenshots & test logs
 scripts/*.png
@@ -46,3 +47,26 @@ scripts/live_e2e_*.log
 # OS
 Thumbs.db
 .DS_Store
+
+# Log files
+scripts/*.log
+reports/*.log
+*.log
+
+# Temporary directories
+web/.task-output/
+web/_reviews/
+web/_screenshot.png
+
+# Experimental scripts (not in active workflow)
+scripts/build_concept_data.py
+scripts/compare_results.py
+scripts/grid_search.py
+scripts/grid_search_exits.py
+scripts/optimize_threshold.py
+scripts/export_dashboard_data.py
+scripts/export_amv_from_tdx.py
+scripts/fetch_*.py
+scripts/check_*.py
+scripts/validate_flow_vs_real.py
+scripts/recheck_tdx_real_flow.py
