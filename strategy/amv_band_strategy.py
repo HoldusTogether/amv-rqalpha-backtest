@@ -99,8 +99,8 @@ def handle_bar(context, bar_dict):
                     _reset_entry(context.band_state)
                     logger.info(f"{trade_date.date()} STOP_LOSS({pos.pnl_ratio:.2%}) {current_etf}")
                     return
-            except Exception:
-                pass
+            except Exception as e:
+                logger.warning(f"Failed to get position for {current_etf}: {e}")
 
         # --- 执行AMV信号 ---
         if action == "LONG_SIGNAL":
@@ -182,7 +182,8 @@ def _etf_is_tradable(context, etf: str, trade_date: pd.Timestamp) -> bool:
         if row.empty:
             return False
         return pd.notna(row.iloc[0].get("close"))
-    except Exception:
+    except Exception as e:
+        logger.warning(f"Failed to check tradability for {etf}: {e}")
         return False
 
 
@@ -198,12 +199,12 @@ def _rebalance_single_etf(context, target_etf, target_weight):
         try:
             if oid != target_etf and get_position(oid).quantity > 0:
                 order_target_percent(oid, 0)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Failed to close position for {oid}: {e}")
     try:
         order_target_percent(target_etf, target_weight)
-    except Exception:
-        logger.warning(f"{pd.Timestamp(context.now).date()} cannot trade {target_etf}; skip")
+    except Exception as e:
+        logger.warning(f"{pd.Timestamp(context.now).date()} cannot trade {target_etf}: {e}")
 
 
 def _clear_all(context):
@@ -211,8 +212,8 @@ def _clear_all(context):
         try:
             if get_position(oid).quantity > 0:
                 order_target_percent(oid, 0)
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning(f"Failed to close position for {oid}: {e}")
 
 
 def _save_signal_log(path: str, log: list) -> None:
