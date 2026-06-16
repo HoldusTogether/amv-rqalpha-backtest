@@ -1,6 +1,8 @@
 """Server酱微信推送辅助脚本 - 供 PowerShell 主脚本调用.
 
 Usage: python wechat_push.py <title> <desp>
+
+Requires SERVERCHAN_SENDKEY set as environment variable (or in live/config.py).
 """
 import json
 import sys
@@ -9,7 +11,7 @@ import urllib.request
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
-from config import SERVERCHAN_SENDKEY  # noqa: E402
+from config import SERVERCHAN_SENDKEY  # noqa: E402 — reads from env var
 
 
 def main() -> int:
@@ -17,7 +19,7 @@ def main() -> int:
     desp = sys.argv[2] if len(sys.argv) > 2 else ""
 
     if not SERVERCHAN_SENDKEY:
-        print(json.dumps({"code": -1, "msg": "SERVERCHAN_SENDKEY not configured"}, ensure_ascii=False))
+        print(json.dumps({"code": -1, "msg": "SERVERCHAN_SENDKEY not configured (set env var)"}, ensure_ascii=False))
         return 1
 
     url = "https://sctapi.ftqq.com/{}.send".format(SERVERCHAN_SENDKEY)

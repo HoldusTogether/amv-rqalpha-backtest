@@ -25,7 +25,8 @@ def parse_klines(data: bytes, start_offset: int) -> list[dict]:
             continue
         try:
             o, h, l, c = struct.unpack("<ffff", chunk[4:20])
-        except:
+        except struct.error as e:
+            print(f"  struct.unpack failed at offset {pos}: {e}")
             break
         kl.append({
             "date": f"{y:04d}-{m:02d}-{d:02d}",

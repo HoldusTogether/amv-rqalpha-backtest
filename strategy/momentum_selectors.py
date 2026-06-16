@@ -79,7 +79,7 @@ def load_concept_daily(path: str | Path) -> pd.DataFrame:
     加载概念日线。优先使用最新日期的数据源。
     - TDX 数据通常更新 (2021+)
     - AKShare 数据可能稍旧
-    合并两个数据源，保留最新日期的记录。
+    合并两个数据源：当 (date, concept) 有重复时，保留来源数据最新的那条记录。
     """
     path = Path(path)
     tdx_path = path.parent / "concept_daily_returns_tdx.csv"
@@ -95,31 +95,42 @@ def load_concept_daily(path: str | Path) -> pd.DataFrame:
     if not has_akshare and not has_tdx:
         return pd.DataFrame(columns=["date", "concept", "close", "return"])
 
-    # ��载两个数据源
-    dfs = []
-    latest_dates = {}
+    # 加载两个数据源，并计算各自的最新日期
+    sources: list[tuple[pd.DataFrame, str]] = []
 
     if has_akshare:
         akshare_df = _load(path)
         if not akshare_df.empty:
-            dfs.append(akshare_df)
-            latest_dates['akshare'] = akshare_df["date"].max()
+            sources.append((akshare_df, "akshare"))
 
     if has_tdx:
         tdx_df = _load(tdx_path)
         if not tdx_df.empty:
-            dfs.append(tdx_df)
-            latest_dates['tdx'] = tdx_df["date"].max()
+            sources.append((tdx_df, "tdx"))
 
-    if not dfs:
+    if not sources:
         return pd.DataFrame(columns=["date", "concept", "close", "return"])
 
-    # 合并所有数据
-    combined = pd.concat(dfs, ignore_index=True)
+    # 确定数据源优先级：最新日期更晚的源优先级更高
+    if len(sources) == 1:
+        return sources[0][0]
 
-    # 对于每个 (date, concept) 保留最新的记录
+    src_a = sources[0]
+    src_b = sources[1]
+    latest_a = src_a[0]["date"].max()
+    latest_b = src_b[0]["date"].max()
+
+    # 把更新（或相等）的数据源放前面，这样在 drop_duplicates(keep="first") 中优先保留
+    if latest_a >= latest_b:
+        primary, secondary = src_a, src_b
+    else:
+        primary, secondary = src_b, src_a
+
+    combined = pd.concat([primary[0], secondary[0]], ignore_index=True)
+
+    # 对于每个 (date, concept) 保留优先级更高（primary）的记录
     combined = combined.sort_values("date").drop_duplicates(
-        subset=["date", "concept"], keep="last"
+        subset=["date", "concept"], keep="first"
     )
 
     # 按日期和概念排序

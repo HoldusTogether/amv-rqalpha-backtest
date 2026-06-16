@@ -77,8 +77,8 @@ def build_signals() -> list[dict]:
         action = entry["action"]
         reason = entry["reason"]
         target_w = float(entry["target_weight"])
-        current_etf = entry.get("current_etf")
-        holding_etf = entry.get("holding_etf")
+        pre_etf = entry.get("pre_etf")
+        post_etf = entry.get("post_etf")
 
         if action == "LONG_SIGNAL":
             signal_label = "多头确认(+3.5%)"
@@ -93,7 +93,7 @@ def build_signals() -> list[dict]:
         else:
             signal_label = "等待"
 
-        was_holding = current_etf is not None
+        was_holding = pre_etf is not None
         is_new_entry = action == "LONG_SIGNAL" and not was_holding
         if action == "LONG_SIGNAL" and is_new_entry:
             trade_action = "买入"
@@ -101,7 +101,7 @@ def build_signals() -> list[dict]:
             trade_action = "清仓"
         elif action == "REDUCE" and was_holding:
             trade_action = "减仓"
-        elif holding_etf is not None:
+        elif post_etf is not None:
             trade_action = "持有"
         else:
             trade_action = "等待"
@@ -126,7 +126,7 @@ def build_signals() -> list[dict]:
             "regime": entry.get("regime", ""),
             "position_status": position_status,
             "target_weight": target_w,
-            "holding_etf": holding_etf,
+            "holding_etf": post_etf,
             "selected_etf": entry.get("selected_etf"),
             "selected_concept": entry.get("selected_concept"),
             "selected_momentum": _safe_float(entry.get("selected_momentum"), None),

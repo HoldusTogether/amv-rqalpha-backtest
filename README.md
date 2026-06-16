@@ -1,28 +1,29 @@
 # 0AMV RQAlpha Backtest
 
-Personal research project for testing a 0AMV `+4% / -2.3%` ETF timing strategy in RQAlpha.
+Personal research project for testing a 0AMV `+3.5% / -2% / -3%` ETF timing strategy in RQAlpha.
 
 ## Layout
 
 - `strategy/amv_rules.py`: 0AMV threshold state machine and ETF selection logic.
 - `strategy/amv_band_strategy.py`: RQAlpha strategy entrypoint and order logic.
-- `data/amv_daily.csv`: 0AMV daily bars or generated 0AMV proxy.
-- `data/concept_flow.csv`: daily concept fund-flow snapshots.
+- `data/amv_daily.csv`: 0AMV daily bars (from Compass software).
+- `data/concept_daily_returns.csv`: concept index daily returns.
+- `data/etf_flow.csv`: ETF daily bars with OHLC + net_flow.
 - `data/concept_etf_map.csv`: concept to ETF mapping.
 - `scripts/validate_data.py`: validates required CSV fields.
 - `scripts/preview_signals.py`: previews strategy signals without RQAlpha.
 - `scripts/run_backtest.ps1`: runs the RQAlpha backtest and exports dashboard data.
-- `scripts/update_data.ps1`: fetches free data through AKShare.
+- `scripts/update_data.ps1`: fetches data from local TDX/Compass or AKShare fallback.
 - `web/`: local dashboard.
-- `docs/DATA_SOURCES.md`: free data source notes and limitations.
+- `docs/DATA_SOURCES.md`: data source notes and limitations.
 
 ## Rules
 
-- 0AMV bullish daily bar with `pct_change >= +4%`: confirm long band, buy the ETF mapped from the strongest concept fund inflow, target weight `100%`.
-- While in the long band, hold unless 0AMV breaks below the low of the anchor `+4%` bar.
-- 0AMV `pct_change <= -1.5%`: reduce the active ETF to `50%`.
-- 0AMV `pct_change <= -2.3%`: clear the active ETF.
-- If the long band anchor low is broken: clear the active ETF.
+- 0AMV bullish daily bar with `pct_change >= +3.5%`: confirm long band, buy the ETF mapped from the strongest concept momentum, target weight `100%`.
+- While in the long band, hold unless 0AMV breaks below the low of the anchor `+3.5%` bar.
+- 0AMV `pct_change <= -2%`: reduce position to `50%` of current (i.e., half the current position).
+- 0AMV `pct_change <= -3%`: clear all positions.
+- If the long band anchor low is broken: clear all positions.
 
 ## Setup
 
@@ -34,21 +35,23 @@ python -m venv .venv
 
 RQAlpha usually downloads data to `.\bundle\bundle`; `scripts/run_backtest.ps1` is configured for that path.
 
-## Data Automation
+## Data Sources
 
-Fetch free data with AKShare:
+Primary data is extracted from local installations:
+- **0AMV**: Compass software `day.vdat` file (Z_SK0AMV)
+- **Concept/ETF**: TDX software `.day` files
+
+AKShare is used as fallback when local data is unavailable.
 
 ```powershell
 .\scripts\update_data.ps1
 ```
 
 This updates:
-
-- `data/amv_daily.csv` using an automatic 0AMV proxy.
-- `data/concept_flow.csv` by appending the latest concept fund-flow snapshot.
-- `data/etf_spot.csv` and high-confidence additions to `data/concept_etf_map.csv`.
-
-Important limitation: the generated 0AMV proxy is not Compass original 0AMV. Free concept fund-flow APIs are best used as daily snapshots; historical backfill is unstable.
+- `data/amv_daily.csv` from Compass
+- `data/concept_daily_returns.csv` from TDX
+- `data/etf_flow.csv` from TDX
+- RQAlpha bundle with latest ETF data
 
 ## Run
 
@@ -86,7 +89,6 @@ Start the local dashboard:
 
 Open:
 
-```text
+```
 http://127.0.0.1:8765
 ```
-

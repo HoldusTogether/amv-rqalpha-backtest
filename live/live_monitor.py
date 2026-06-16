@@ -25,7 +25,7 @@ import json
 import sys
 import urllib.parse
 import urllib.request
-from datetime import date, datetime
+from datetime import date
 from pathlib import Path
 
 import pandas as pd
@@ -40,25 +40,17 @@ from amv_rules import (
     initial_state,
     load_amv_daily,
 )
+from config.params import StrategyParams
 from momentum_selectors import (
     load_concept_daily,
     load_concept_etf_map,
     load_etf_daily,
     select_etf_by_concept_momentum,
 )
+from utils.logger import get_logger
+from live.config import SERVERCHAN_SENDKEY, PUSH_ON_NO_SIGNAL
 
-from live.config import (
-    DIVERSITY_STRENGTH,
-    LONG_THRESHOLD,
-    LONG_WEIGHT,
-    MOMENTUM_WINDOW,
-    PUSH_ON_NO_SIGNAL,
-    REDUCE_THRESHOLD,
-    REDUCE_WEIGHT,
-    SERVERCHAN_SENDKEY,
-    SHORT_THRESHOLD,
-    TOP_N,
-)
+logger = get_logger("live_monitor")
 
 DATA_DIR = ROOT / "data"
 LIVE_DIR = ROOT / "live"
@@ -99,6 +91,7 @@ def push_notification(title: str, content: str) -> bool:
             return False
     except Exception as e:
         print("[推送] 失败: {}".format(e))
+        logger.warning("Push notification failed: %s", e)
         return False
 
 
@@ -139,16 +132,17 @@ def build_msg(
     if action == "REDUCE":
         eid = state.get("current_etf", "")
         ename = state.get("etf_name", eid)
+        pre_w = state.get("_pre_reduce_weight", state.get("target_weight", 1.0) / 0.5)
         cur_w = state.get("target_weight", 1.0)
         title = "【AMV策略】减仓信号 ⚠️"
         content = (
             "### 减仓信号\n\n"
             "**日期：** {}\n"
             "**AMV跌幅：** {}\n"
-            "**建议动作：** 减仓至 {:.0f}%\n"
+            "**建议动作：** 减仓至 {:.0f}%（减半）\n"
             "**持仓标的：** {} {}\n"
             "**当前仓位：** {:.0f}% → {:.0f}%"
-        ).format(today_str, fmt_pct(pct), cur_w * 100, eid, ename, cur_w * 100 / 0.5, cur_w * 100)
+        ).format(today_str, fmt_pct(pct), cur_w * 100, eid, ename, pre_w * 100, cur_w * 100)
         return title, content
 
     if action in ("SHORT_CLEAR", "ANCHOR_BREAK_CLEAR"):
@@ -253,13 +247,18 @@ def main() -> int:
     band_state["current_etf"] = state.get("current_etf")
     band_state["target_weight"] = state.get("target_weight", 0.0)
 
+    sp = StrategyParams()
     params = BandParams(
-        long_threshold=LONG_THRESHOLD,
-        reduce_threshold=REDUCE_THRESHOLD,
-        short_threshold=SHORT_THRESHOLD,
-        long_weight=LONG_WEIGHT,
-        reduce_weight=REDUCE_WEIGHT,
+        long_threshold=sp.long_threshold,
+        reduce_threshold=sp.reduce_threshold,
+        short_threshold=sp.short_threshold,
+        long_weight=sp.long_weight,
+        reduce_weight=sp.reduce_weight,
+        roll_anchor_on_new_long_signal=sp.roll_anchor_on_new_long_signal,
     )
+    momentum_window = sp.momentum_window
+    top_n = sp.top_n
+    diversity_strength = sp.diversity_strength
 
     # ── 执行策略 ──
     decision = decide_action(amv_row, band_state, params)
@@ -277,10 +276,10 @@ def main() -> int:
             trade_date = pd.Timestamp(amv_row["date"])
             chosen = select_etf_by_concept_momentum(
                 concept_daily, concept_map, trade_date,
-                window=MOMENTUM_WINDOW,
+                window=momentum_window,
                 avoid_etfs=avoid,
-                top_n=TOP_N,
-                diversity_strength=DIVERSITY_STRENGTH,
+                top_n=top_n,
+                diversity_strength=diversity_strength,
             )
             if chosen:
                 state["current_etf"] = chosen["order_book_id"]
@@ -306,6 +305,7 @@ def main() -> int:
     elif action == "REDUCE":
         cur_w = state.get("target_weight", 1.0)
         new_w = band_state["target_weight"]
+        state["_pre_reduce_weight"] = cur_w  # record for build_msg
         state["target_weight"] = new_w
         print("  减仓: {:.0f}% → {:.0f}%".format(cur_w * 100, new_w * 100))
 

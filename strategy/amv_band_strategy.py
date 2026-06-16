@@ -38,8 +38,9 @@ from momentum_selectors import (
     load_etf_daily,
     select_etf_by_concept_momentum,
 )
+from utils.logger import get_logger
 
-MOMENTUM_WINDOW = 5  # 动量窗口，可选 1（单日）或 5（5日累计）
+logger = get_logger("amv_band_strategy")
 
 
 def init(context):
@@ -49,6 +50,9 @@ def init(context):
     sp = StrategyParams()
     context.params = BandParams(**sp.to_band_params_dict())
     context.risk_params = RiskParams(**sp.to_risk_params_dict())
+    context.momentum_window = sp.momentum_window
+    context.top_n = sp.top_n
+    context.diversity_strength = sp.diversity_strength
     context.amv_daily = load_amv_daily(context.data_dir / "amv_daily.csv")
     context.etf_daily = load_etf_daily(context.data_dir / "etf_flow.csv")
     context.concept_daily = load_concept_daily(context.data_dir / "concept_daily_returns.csv")
@@ -62,7 +66,7 @@ def init(context):
         f"ETF={len(context.etf_daily)}, "
         f"concepts={len(context.concept_map)}, "
         f"candidates={len(context.all_etfs)}, "
-        f"window={MOMENTUM_WINDOW}"
+        f"window={context.momentum_window}"
     )
 
 
@@ -112,7 +116,8 @@ def handle_bar(context, bar_dict):
             avoid = set(context.band_state.get("recent_etfs", []))
             chosen = select_etf_by_concept_momentum(
                 context.concept_daily, context.concept_map, trade_date,
-                window=MOMENTUM_WINDOW, avoid_etfs=avoid, top_n=3, diversity_strength=0.5,
+                window=context.momentum_window, avoid_etfs=avoid,
+                top_n=context.top_n, diversity_strength=context.diversity_strength,
             )
             target_etf = chosen["order_book_id"]
             target_concept = chosen.get("concept", "")
@@ -163,8 +168,8 @@ def handle_bar(context, bar_dict):
             "reason": decision["reason"],
             "target_weight": target_weight,
             "regime": context.band_state.get("regime", ""),
-            "current_etf": current_etf,
-            "holding_etf": context.band_state.get("current_etf"),
+            "pre_etf": current_etf,
+            "post_etf": context.band_state.get("current_etf"),
             "selected_etf": chosen["order_book_id"] if chosen else None,
             "selected_concept": chosen.get("concept") if chosen else None,
             "selected_momentum": chosen.get("momentum") if chosen else None,

@@ -9,19 +9,19 @@ import pandas as pd
 
 @dataclass(frozen=True)
 class BandParams:
-    long_threshold: float = 0.04
-    reduce_threshold: float = -0.015
-    short_threshold: float = -0.023
-    long_weight: float = 1.0
-    reduce_weight: float = 0.5
+    long_threshold: float
+    reduce_threshold: float
+    short_threshold: float
+    long_weight: float
+    reduce_weight: float
     roll_anchor_on_new_long_signal: bool = True
 
 
 @dataclass(frozen=True)
 class RiskParams:
-    stop_loss_pct: float = 0.08
-    max_hold_days: int = 60
-    take_profit_pct: float = 0.0
+    stop_loss_pct: float
+    max_hold_days: int
+    take_profit_pct: float
 
 
 def _as_date_index(frame: pd.DataFrame, date_col: str = "date") -> pd.DataFrame:
@@ -93,7 +93,7 @@ def initial_state() -> dict[str, Any]:
 def check_stop_loss(
     current_price: float,
     state: dict[str, Any],
-    params: RiskParams = RiskParams(),
+    params: RiskParams,
 ) -> dict[str, Any]:
     entry_price = state.get("entry_price")
     entry_date = state.get("entry_date")
@@ -114,7 +114,7 @@ def check_stop_loss(
 def decide_action(
     amv_row: pd.Series,
     state: dict[str, Any],
-    params: BandParams = BandParams(),
+    params: BandParams,
 ) -> dict[str, Any]:
     pct = float(amv_row["pct_change"])
     low = float(amv_row["low"])

@@ -47,18 +47,13 @@ def check_amv_daily():
         errors.append(f"AMV: missing columns {missing}")
         return
 
-    # Check no negative prices
+    # Check no negative prices (single unified check)
     for col in ["open", "high", "low", "close"]:
         negatives = (df[col] < 0).sum()
         if negatives > 0:
-            errors.append(f"AMV: {negatives} negative {col} values")
+            errors.append(f"AMV: {col} has {negatives} negative value(s) (min={df[col].min()})")
         else:
             print(f"  [OK] AMV {col} no negative values")
-
-    # AMV is an index (values can be ~250k+), only check for non-negative
-    for col in ["open", "high", "low", "close"]:
-        if df[col].min() < 0:
-            errors.append(f"AMV: {col} has negative values (min={df[col].min()})")
 
     # Check pct_change
     if "pct_change" in df.columns:
@@ -86,7 +81,7 @@ def check_concept_data():
         if not check_file_exists(path):
             continue
 
-        df = pd.read_csv(path)
+        df = pd.read_csv(path, parse_dates=["date"])
 
         if df.empty:
             errors.append(f"CONCEPT: {filename} is empty")
@@ -105,7 +100,20 @@ def check_concept_data():
             else:
                 print(f"  [OK] {filename}: no NaN close values")
 
-        print(f"  [OK] {filename}: {len(df)} rows, {df['date'].min()} ~ {df['date'].max()}")
+        # Check for NaN or extreme return values
+        if "return" in df.columns:
+            nan_return = df["return"].isna().sum()
+            if nan_return > 0:
+                warnings.append(f"CONCEPT ({filename}): {nan_return} NaN return values")
+            extreme_ret = (df["return"].abs() > 0.30).sum() if "return" in df.columns else 0
+            if extreme_ret > 0:
+                warnings.append(f"CONCEPT ({filename}): {extreme_ret} extreme return values (>30%)")
+        else:
+            print(f"  [OK] {filename}: no return column to check")
+
+        date_min = df["date"].min().date() if hasattr(df["date"].min(), "date") else df["date"].min()
+        date_max = df["date"].max().date() if hasattr(df["date"].max(), "date") else df["date"].max()
+        print(f"  [OK] {filename}: {len(df)} rows, {date_min} ~ {date_max}")
 
 
 def check_etf_data():

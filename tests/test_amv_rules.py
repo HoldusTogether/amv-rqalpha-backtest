@@ -7,7 +7,25 @@ import pytest
 # Ensure project root is on sys.path so `strategy.*` imports work
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from strategy.amv_rules import initial_state, decide_action, BandParams
+from config.params import StrategyParams
+from strategy.amv_rules import BandParams, RiskParams, initial_state, decide_action
+
+
+_SP = StrategyParams()
+
+
+def _band_params(**overrides) -> BandParams:
+    """Build BandParams from StrategyParams defaults, with optional overrides."""
+    params = {
+        "long_threshold": _SP.long_threshold,
+        "reduce_threshold": _SP.reduce_threshold,
+        "short_threshold": _SP.short_threshold,
+        "long_weight": _SP.long_weight,
+        "reduce_weight": _SP.reduce_weight,
+        "roll_anchor_on_new_long_signal": _SP.roll_anchor_on_new_long_signal,
+    }
+    params.update(overrides)
+    return BandParams(**params)
 
 
 def create_amv_row(
@@ -35,26 +53,42 @@ def create_amv_row(
 
 
 class TestBandParams:
-    def test_defaults(self):
-        bp = BandParams()
-        assert bp.long_threshold == 0.04
-        assert bp.reduce_threshold == -0.015
-        assert bp.short_threshold == -0.023
-        assert bp.long_weight == 1.0
-        assert bp.reduce_weight == 0.5
-        assert bp.roll_anchor_on_new_long_signal is True
+    def test_requires_explicit_values(self):
+        bp = _band_params()
+        assert bp.long_threshold == _SP.long_threshold
+        assert bp.reduce_threshold == _SP.reduce_threshold
+        assert bp.short_threshold == _SP.short_threshold
+        assert bp.long_weight == _SP.long_weight
+        assert bp.reduce_weight == _SP.reduce_weight
+        assert bp.roll_anchor_on_new_long_signal is _SP.roll_anchor_on_new_long_signal
 
     def test_custom_values(self):
-        bp = BandParams(long_threshold=0.05, reduce_weight=0.3)
+        bp = _band_params(long_threshold=0.05, reduce_weight=0.3)
         assert bp.long_threshold == 0.05
         assert bp.reduce_weight == 0.3
-        # defaults still apply for unspecified fields
-        assert bp.short_threshold == -0.023
+        assert bp.short_threshold == _SP.short_threshold
 
     def test_frozen(self):
-        bp = BandParams()
+        bp = _band_params()
         with pytest.raises(Exception):
             bp.long_threshold = 0.06  # type: ignore
+
+
+# ---------------------------------------------------------------------------
+# RiskParams
+# ---------------------------------------------------------------------------
+
+
+class TestRiskParams:
+    def test_requires_explicit_values(self):
+        rp = RiskParams(
+            stop_loss_pct=_SP.stop_loss_pct,
+            max_hold_days=_SP.max_hold_days,
+            take_profit_pct=_SP.take_profit_pct,
+        )
+        assert rp.stop_loss_pct == _SP.stop_loss_pct
+        assert rp.max_hold_days == _SP.max_hold_days
+        assert rp.take_profit_pct == _SP.take_profit_pct
 
 
 # ---------------------------------------------------------------------------
@@ -89,7 +123,7 @@ class TestDecideAction_LongSignal:
     def test_long_signal_from_neutral(self):
         state = initial_state()
         row = create_amv_row(pct_change=0.05, is_bullish=True, low=100.0)
-        result = decide_action(row, state)
+        result = decide_action(row, state, _band_params())
         assert result["action"] == "LONG_SIGNAL"
         assert result["target_weight"] == 1.0
         assert result["reason"] == "amv_long_threshold"
@@ -100,25 +134,25 @@ class TestDecideAction_LongSignal:
 
     def test_long_signal_exact_threshold(self):
         state = initial_state()
-        row = create_amv_row(pct_change=0.04, is_bullish=True, low=99.0)
-        result = decide_action(row, state)
+        row = create_amv_row(pct_change=_SP.long_threshold, is_bullish=True, low=99.0)
+        result = decide_action(row, state, _band_params())
         assert result["action"] == "LONG_SIGNAL"
 
     def test_no_long_signal_below_threshold(self):
         state = initial_state()
         row = create_amv_row(pct_change=0.03, is_bullish=True, low=100.0)
-        result = decide_action(row, state)
+        result = decide_action(row, state, _band_params())
         assert result["action"] == "WAIT"
 
     def test_no_long_signal_if_not_bullish(self):
         state = initial_state()
         row = create_amv_row(pct_change=0.05, is_bullish=False, low=100.0)
-        result = decide_action(row, state)
+        result = decide_action(row, state, _band_params())
         assert result["action"] == "WAIT"
 
     def test_custom_long_weight(self):
         state = initial_state()
-        params = BandParams(long_weight=0.8)
+        params = _band_params(long_weight=0.8)
         row = create_amv_row(pct_change=0.05, is_bullish=True, low=100.0)
         result = decide_action(row, state, params)
         assert result["target_weight"] == 0.8
@@ -132,8 +166,8 @@ class TestDecideAction_LongSignal:
 class TestDecideAction_ShortClear:
     def test_short_clear_exact_threshold(self):
         state = initial_state()
-        row = create_amv_row(pct_change=-0.023, is_bullish=False, low=95.0)
-        result = decide_action(row, state)
+        row = create_amv_row(pct_change=_SP.short_threshold, is_bullish=False, low=95.0)
+        result = decide_action(row, state, _band_params())
         assert result["action"] == "SHORT_CLEAR"
         assert result["target_weight"] == 0.0
         assert result["reason"] == "amv_short_threshold"
@@ -143,14 +177,14 @@ class TestDecideAction_ShortClear:
     def test_short_clear_below_threshold(self):
         state = initial_state()
         row = create_amv_row(pct_change=-0.05, is_bullish=False, low=90.0)
-        result = decide_action(row, state)
+        result = decide_action(row, state, _band_params())
         assert result["action"] == "SHORT_CLEAR"
 
     def test_short_clear_overrides_long(self):
         """Even a bullish candle at short threshold fires SHORT_CLEAR."""
         state = initial_state()
         row = create_amv_row(pct_change=-0.03, is_bullish=True, low=95.0)
-        result = decide_action(row, state)
+        result = decide_action(row, state, _band_params())
         assert result["action"] == "SHORT_CLEAR"
 
     def test_short_clear_resets_position(self):
@@ -165,7 +199,7 @@ class TestDecideAction_ShortClear:
             }
         )
         row = create_amv_row(pct_change=-0.03, is_bullish=False, low=95.0)
-        result = decide_action(row, state)
+        result = decide_action(row, state, _band_params())
         assert result["action"] == "SHORT_CLEAR"
         assert state["target_weight"] == 0.0
         assert state["anchor_low"] is None
@@ -187,8 +221,8 @@ class TestDecideAction_Reduce:
             }
         )
         # pct between short_threshold and reduce_threshold
-        row = create_amv_row(pct_change=-0.02, is_bullish=False, low=101.0)
-        result = decide_action(row, state)
+        row = create_amv_row(pct_change=_SP.reduce_threshold, is_bullish=False, low=101.0)
+        result = decide_action(row, state, _band_params())
         assert result["action"] == "REDUCE"
         assert result["target_weight"] == 0.5  # 1.0 * 0.5
         assert result["reason"] == "amv_reduce_threshold"
@@ -202,15 +236,15 @@ class TestDecideAction_Reduce:
                 "anchor_low": 100.0,
             }
         )
-        row = create_amv_row(pct_change=-0.015, is_bullish=False, low=101.0)
-        result = decide_action(row, state)
+        row = create_amv_row(pct_change=_SP.reduce_threshold, is_bullish=False, low=101.0)
+        result = decide_action(row, state, _band_params())
         assert result["action"] == "REDUCE"
 
     def test_no_reduce_without_position(self):
         state = initial_state()
-        row = create_amv_row(pct_change=-0.02, is_bullish=False, low=101.0)
-        result = decide_action(row, state)
-        # SHORT_CLEAR triggers first (-0.02 <= -0.023? no, so falls through to WAIT)
+        row = create_amv_row(pct_change=_SP.reduce_threshold, is_bullish=False, low=101.0)
+        result = decide_action(row, state, _band_params())
+        # SHORT_CLEAR triggers first if pct <= short_threshold, else WAIT
         assert result["action"] == "WAIT"
 
     def test_reduce_with_custom_weight(self):
@@ -222,8 +256,8 @@ class TestDecideAction_Reduce:
                 "anchor_low": 100.0,
             }
         )
-        params = BandParams(reduce_weight=0.3)
-        row = create_amv_row(pct_change=-0.02, is_bullish=False, low=101.0)
+        params = _band_params(reduce_weight=0.3)
+        row = create_amv_row(pct_change=_SP.reduce_threshold, is_bullish=False, low=101.0)
         result = decide_action(row, state, params)
         assert result["target_weight"] == pytest.approx(0.8 * 0.3)
 
@@ -244,7 +278,7 @@ class TestDecideAction_AnchorBreak:
             }
         )
         row = create_amv_row(pct_change=0.01, is_bullish=True, low=99.0)
-        result = decide_action(row, state)
+        result = decide_action(row, state, _band_params())
         assert result["action"] == "ANCHOR_BREAK_CLEAR"
         assert result["target_weight"] == 0.0
         assert result["reason"] == "amv_anchor_break"
@@ -255,9 +289,9 @@ class TestDecideAction_AnchorBreak:
         state = initial_state()
         state["anchor_low"] = 100.0  # anchor set but no ETF held
         row = create_amv_row(pct_change=0.01, is_bullish=True, low=99.0)
-        result = decide_action(row, state)
+        result = decide_action(row, state, _band_params())
         assert result["action"] != "ANCHOR_BREAK_CLEAR"
-        # should fall through to WAIT (no position, pct 0.01 < 0.04)
+        # should fall through to WAIT (no position, pct below long threshold)
 
     def test_no_anchor_break_when_low_above(self):
         state = initial_state()
@@ -269,7 +303,7 @@ class TestDecideAction_AnchorBreak:
             }
         )
         row = create_amv_row(pct_change=0.01, is_bullish=True, low=100.5)
-        result = decide_action(row, state)
+        result = decide_action(row, state, _band_params())
         assert result["action"] != "ANCHOR_BREAK_CLEAR"
 
 
@@ -289,7 +323,7 @@ class TestDecideAction_HoldLong:
             }
         )
         row = create_amv_row(pct_change=0.01, is_bullish=True, low=101.0)
-        result = decide_action(row, state)
+        result = decide_action(row, state, _band_params())
         assert result["action"] == "HOLD_LONG"
         assert result["target_weight"] == 1.0
         assert result["reason"] == "hold"
@@ -312,14 +346,14 @@ class TestDecideAction_HoldLong:
             low=105.0,
             date="2024-01-15",
         )
-        result = decide_action(row, state)
+        result = decide_action(row, state, _band_params())
         assert result["action"] == "HOLD_LONG"
         assert result["reason"] == "roll_anchor"
         assert state["anchor_low"] == 105.0
         assert state["anchor_date"] == pd.Timestamp("2024-01-15")
 
     def test_hold_long_no_roll_when_disabled(self):
-        params = BandParams(roll_anchor_on_new_long_signal=False)
+        params = _band_params(roll_anchor_on_new_long_signal=False)
         state = initial_state()
         state.update(
             {
@@ -350,7 +384,7 @@ class TestDecideAction_Wait:
     def test_wait_no_position_no_signal(self):
         state = initial_state()
         row = create_amv_row(pct_change=0.01, is_bullish=True, low=100.0)
-        result = decide_action(row, state)
+        result = decide_action(row, state, _band_params())
         assert result["action"] == "WAIT"
         assert result["target_weight"] == 0.0
         assert result["reason"] == "no_signal"
@@ -358,5 +392,5 @@ class TestDecideAction_Wait:
     def test_wait_near_zero(self):
         state = initial_state()
         row = create_amv_row(pct_change=0.0, is_bullish=True, low=100.0)
-        result = decide_action(row, state)
+        result = decide_action(row, state, _band_params())
         assert result["action"] == "WAIT"
